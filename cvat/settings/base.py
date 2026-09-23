@@ -128,6 +128,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "allauth",
     "allauth.account",
+         "cvat.apps.test",
     "corsheaders",
     "allauth.socialaccount",
     "health_check",

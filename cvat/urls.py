@@ -26,6 +26,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("cvat.apps.engine.urls")),
     path("", include("cvat.apps.redis_handler.urls")),
+        path('api/test/', include('cvat.apps.test.urls')),
     path("django-rq/", include("django_rq.urls")),
 ]
 
