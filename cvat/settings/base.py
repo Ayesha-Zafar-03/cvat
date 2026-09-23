@@ -128,7 +128,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "allauth",
     "allauth.account",
-         "cvat.apps.test",
+    "cvat.apps.test",
     "corsheaders",
     "allauth.socialaccount",
     "health_check",
@@ -147,6 +147,7 @@ INSTALLED_APPS = [
     "cvat.apps.quality_control",
     "cvat.apps.redis_handler",
     "cvat.apps.consensus",
+    "channels",
     "cvat.apps.access_tokens",
     "cvat.apps.growth",
 ]
@@ -615,6 +616,17 @@ LOGGING = {
             "level": "INFO",
             # set True for debug
             "propagate": False,
+        },
+    },
+}
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [
+                f"redis://:{urllib.parse.quote(redis_inmem_password)}@{redis_inmem_host}:{redis_inmem_port}/0"
+            ],
         },
     },
 }
