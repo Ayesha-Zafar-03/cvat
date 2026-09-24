@@ -1,40 +1,47 @@
-from collections import Counter
+import logging
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.db.models.signals import post_save, post_delete
+from django.db import transaction
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from cvat.apps.engine.models import LabeledShape
 
+from .services import compute_counts
+
+logger = logging.getLogger(__name__)
+
 
 def _push_update(task_id):
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f'class_counts_{task_id}',
+            {'type': 'class_count_update', 'data': compute_counts(task_id)},
+        )
+    except Exception:
+        # Analytics must never break annotation saving.
+        logger.exception("class-count push failed for task %s", task_id)
+
+
+def _schedule_push(instance):
+    try:
+        task_id = instance.job.segment.task_id
+    except Exception:
+        logger.exception("could not resolve task for shape %s", getattr(instance, "pk", None))
         return
-    shapes = LabeledShape.objects.filter(
-        job__segment__task_id=task_id
-    ).select_related('label')
-    counts = Counter(shape.label.name for shape in shapes)
-    async_to_sync(channel_layer.group_send)(
-        f'class_counts_{task_id}',
-        {
-            'type': 'class_count_update',
-            'data': {
-                'task_id': task_id,
-                'class_counts': dict(counts),
-                'total_annotations': sum(counts.values()),
-            }
-        }
-    )
+    # Push only after the transaction commits so clients never see uncommitted or rolled-back data.
+    transaction.on_commit(lambda: _push_update(task_id))
 
 
 @receiver(post_save, sender=LabeledShape)
 def on_shape_saved(sender, instance, **kwargs):
-    task_id = instance.job.segment.task_id
-    _push_update(task_id)
+    _schedule_push(instance)
 
 
 @receiver(post_delete, sender=LabeledShape)
 def on_shape_deleted(sender, instance, **kwargs):
-    task_id = instance.job.segment.task_id
-    _push_update(task_id)
+    _schedule_push(instance)
