@@ -26,3 +26,10 @@ def class_wise_counts(request, task_id):
         "class_counts": dict(counts),
         "total_annotations": sum(counts.values()),
     })
+from django.http import HttpResponse
+from pathlib import Path
+
+
+def dashboard_view(request):
+    html_path = Path(__file__).resolve().parent / "dashboard.html"
+    return HttpResponse(html_path.read_text(), content_type="text/html")

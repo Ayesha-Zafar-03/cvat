@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CVAT Class-Wise Analytics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; }
+  #status { padding: 8px 12px; border-radius: 6px; font-weight: bold; margin-bottom: 20px; }
+  .connected { background: #d4edda; color: #155724; }
+  .disconnected { background: #f8d7da; color: #721c24; }
+  #totalCount { font-size: 1.2em; margin-top: 15px; }
+</style>
+</head>
+<body>
+  <h1>Class-Wise Annotation Analytics</h1>
+  <p>Task ID: <input id="taskId" value="1" style="width:60px"> <button onclick="loadTask()">Load</button></p>
+  <div id="status" class="disconnected">Disconnected</div>
+  <canvas id="chart" width="600" height="350"></canvas>
+  <div id="totalCount"></div>
+
+<script>
+let chart, ws, currentTaskId;
+
+function updateChart(data) {
+  const labels = Object.keys(data.class_counts);
+  const values = Object.values(data.class_counts);
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = values;
+  chart.update();
+  document.getElementById('totalCount').textContent =
+    `Total annotations: ${data.total_annotations}`;
+}
+
+function connectWebSocket(taskId) {
+  if (ws) ws.close();
+  ws = new WebSocket(`ws://${location.host}/ws/test/tasks/${taskId}/class-counts/`);
+  const statusEl = document.getElementById('status');
+
+  ws.onopen = () => {
+    statusEl.textContent = 'Connected — live updates active';
+    statusEl.className = 'connected';
+  };
+  ws.onmessage = (event) => updateChart(JSON.parse(event.data));
+  ws.onclose = () => {
+    statusEl.textContent = 'Disconnected — retrying in 3s...';
+    statusEl.className = 'disconnected';
+    setTimeout(() => connectWebSocket(currentTaskId), 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+async function loadTask() {
+  currentTaskId = document.getElementById('taskId').value;
+  const res = await fetch(`/api/test/tasks/${currentTaskId}/class-counts/`, {
+    headers: { 'Accept': 'application/json' },
+    credentials: 'include'
+  });
+  const data = await res.json();
+  updateChart(data);
+  connectWebSocket(currentTaskId);
+}
+
+window.onload = () => {
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ label: 'Annotation Count', data: [], backgroundColor: '#4e79a7' }] },
+    options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+  loadTask();
+};
+</script>
+</body>
+</html>
