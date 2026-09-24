@@ -52,13 +52,23 @@ function connectWebSocket(taskId) {
 
 async function loadTask() {
   currentTaskId = document.getElementById('taskId').value;
-  const res = await fetch(`/api/test/tasks/${currentTaskId}/class-counts/`, {
-    headers: { 'Accept': 'application/json' },
-    credentials: 'include'
-  });
-  const data = await res.json();
-  updateChart(data);
-  connectWebSocket(currentTaskId);
+  try {
+    const res = await fetch(`/api/test/tasks/${currentTaskId}/class-counts/`, {
+      headers: { 'Accept': 'application/vnd.cvat+json; version=2.0' },
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      document.getElementById('status').textContent = `Error loading data: HTTP ${res.status}`;
+      document.getElementById('status').className = 'disconnected';
+      return;
+    }
+    const data = await res.json();
+    updateChart(data);
+    connectWebSocket(currentTaskId);
+  } catch (err) {
+    document.getElementById('status').textContent = `Error: ${err.message}`;
+    document.getElementById('status').className = 'disconnected';
+  }
 }
 
 window.onload = () => {
