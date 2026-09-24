@@ -1,47 +1,33 @@
 import logging
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.db import transaction
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from cvat.apps.engine.models import LabeledShape
+from cvat.apps.engine.models import Job
 
-from .services import compute_counts
+from .services import push_class_counts
 
 logger = logging.getLogger(__name__)
 
 
-def _push_update(task_id):
-    try:
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            f'class_counts_{task_id}',
-            {'type': 'class_count_update', 'data': compute_counts(task_id)},
-        )
-    except Exception:
-        # Analytics must never break annotation saving.
-        logger.exception("class-count push failed for task %s", task_id)
-
-
 def _schedule_push(instance):
     try:
-        task_id = instance.job.segment.task_id
+        task_id = instance.segment.task_id
     except Exception:
-        logger.exception("could not resolve task for shape %s", getattr(instance, "pk", None))
+        logger.exception("could not resolve task for job %s", getattr(instance, "pk", None))
         return
-    # Push only after the transaction commits so clients never see uncommitted or rolled-back data.
-    transaction.on_commit(lambda: _push_update(task_id))
+    # Push only after the transaction commits so clients never see uncommitted
+    # or rolled-back data.
+    transaction.on_commit(lambda: push_class_counts(task_id))
 
 
-@receiver(post_save, sender=LabeledShape)
-def on_shape_saved(sender, instance, **kwargs):
-    _schedule_push(instance)
-
-
-@receiver(post_delete, sender=LabeledShape)
-def on_shape_deleted(sender, instance, **kwargs):
+@receiver(post_save, sender=Job)
+def on_job_saved(sender, instance, **kwargs):
+    # CVAT persists annotations with bulk_create() (which does not emit the
+    # per-row post_save signal), so the reliable "annotations changed" event is
+    # the job updated_date touch() that CVAT performs inside every annotation
+    # mutation (create / update / put / delete), see TaskDataDB in
+    # cvat.apps.dataset_manager.task. A post_save on Job therefore fires exactly
+    # once per committed annotation change that touches the task data.
     _schedule_push(instance)

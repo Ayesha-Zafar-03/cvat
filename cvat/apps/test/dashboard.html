@@ -91,7 +91,8 @@ async function loadTask() {
       credentials: 'include'
     });
     if (res.status === 404) { setStatus(`Task ${id} not found`, false); return; }
-    if (res.status === 401 || res.status === 403) { setStatus('Not logged in - log in to CVAT first', false); return; }
+    if (res.status === 401) { setStatus('Not logged in - log in to CVAT first', false); return; }
+    if (res.status === 403) { setStatus('You do not have access to this task', false); return; }
     if (!res.ok) { setStatus(`Error loading data: HTTP ${res.status}`, false); return; }
     updateChart(await res.json());
     connectWebSocket(id);

@@ -3,25 +3,32 @@ from pathlib import Path
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from cvat.apps.engine.models import Task
 
+from .auth import can_user_view_task
 from .services import compute_counts
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def class_wise_counts(request, task_id):
     """
     Class-wise counts for a task.
+
     GET /api/test/tasks/<task_id>/class-counts/
+
     Response: {"task_id": 5,
                "class_counts": {"car": {"images": 3, "annotations": 12}},
                "total_annotations": 12}
     """
     get_object_or_404(Task, pk=task_id)
+    if not can_user_view_task(request.user, task_id):
+        raise PermissionDenied("You do not have access to this task.")
+
     return Response(compute_counts(task_id))
 
 
